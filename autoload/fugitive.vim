@@ -576,15 +576,20 @@ function! s:LinesError(...) abort
   return [len(out) && !exec_error ? split(out, "\n", 1) : [], exec_error]
 endfunction
 
-function! s:NullError(...) abort
-  let [out, exec_error] = s:SystemError(call('fugitive#Prepare', a:000))
-  if exec_error
-    return [[], substitute(out, "\n$", "", ""), exec_error]
-  else
-    let list = split(out, "\1", 1)
-    call remove(list, -1)
-    return [list, '', exec_error]
-  endif
+function! s:NullError(cmd) abort
+  let temp = tempname()
+  try
+    let [err, exec_error] = s:TempCmd(temp, a:cmd)
+    if exec_error
+      return [[], substitute(err, "\n$", "", ""), exec_error]
+    else
+      let list = split(tr(join(readfile(temp, 'b'), "\1"), "\1\n", "\n\1"), "\1", 1)
+      call remove(list, -1)
+      return [list, err, exec_error]
+    endif
+  finally
+    call delete(temp)
+  endtry
 endfunction
 
 function! s:TreeChomp(...) abort
