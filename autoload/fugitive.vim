@@ -1622,7 +1622,7 @@ endfunction
 
 function! s:UpdateIndex(dir, info) abort
   let info = join(a:info[0:-2]) . "\t" . a:info[-1] . "\n"
-  let [error, exec_error] = s:SystemError(fugitive#Prepare([a:dir, 'update-index', '--index-info']), info)
+  let [error, exec_error] = s:TempCmd('', [a:dir, 'update-index', '--index-info'], info)
   return !exec_error ? '' : len(error) ? error : 'unknown update-index error'
 endfunction
 
@@ -1638,7 +1638,7 @@ function! fugitive#setfperm(url, perm) abort
   return len(error) ? -1 : 0
 endfunction
 
-function! s:TempCmd(out, cmd) abort
+function! s:TempCmd(out, cmd, ...) abort
   let [argv, jopts] = s:PrepareJob(a:cmd)
   let exit = []
   if exists('*jobstart')
@@ -1647,18 +1647,26 @@ function! s:TempCmd(out, cmd) abort
           \ 'stderr_buffered': v:true,
           \ 'on_exit': { j, code, _ -> add(exit, code) }})
     let job = jobstart(argv, jopts)
+    if a:0
+      call chansend(job, split(a:1, "\n", 1)[0:-2])
+    endif
     call chanclose(job, 'stdin')
     call jobwait([job])
-    call writefile(jopts.stdout, a:out, 'b')
+    if len(a:out)
+      call writefile(jopts.stdout, a:out, 'b')
+    endif
     return [join(jopts.stderr, "\n"), exit[0]]
   elseif exists('*job_start')
     let err = []
     call extend(jopts, {
-          \ 'out_io': 'file',
+          \ 'out_io': len(a:out) ? 'file' : 'null',
           \ 'out_name': a:out,
           \ 'err_cb': { j, str -> add(err, str . "\n") },
           \ 'exit_cb': { j, code -> add(exit, code) }})
     let job = job_start(argv, jopts)
+    if a:0
+      call ch_sendraw(job, a:1)
+    endif
     call ch_close_in(job)
     while ch_status(job) !=# 'closed' || job_status(job) ==# 'run'
       sleep 1m
